@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" href="icon.webp"/>
+    <link rel="icon" href="icon.png"/>
     <title>文件上传</title>
     <style>
         body {
@@ -19,6 +19,19 @@
         .hidden {
             display: none;
         }
+        .file-list {
+            margin-top: 20px;
+            width: 300px;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .file-item button {
+            margin-left: 10px;
+        }
     </style>
 </head>
 <body>
@@ -26,21 +39,49 @@
         <input type="file" name="file" multiple>
         <input type="password" id="password" placeholder="请输入上传密码" class="hidden">
         <button type="submit">上传</button>
+        <button type="button" id="cancelButton" class="hidden">取消上传</button>
     </form>
+    <div class="file-list" id="fileList"></div>
     <progress id="progress" value="0" max="100"></progress>
 
     <script>
+        const fileInput = document.querySelector('input[type="file"]');
+        const fileList = document.getElementById('fileList');
+        const cancelButton = document.getElementById('cancelButton');
+        let uploadId = null;
+
+        fileInput.addEventListener('change', function() {
+            fileList.innerHTML = '';
+            for (const file of fileInput.files) {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.textContent = file.name;
+                const removeButton = document.createElement('button');
+                removeButton.textContent = '删除';
+                removeButton.addEventListener('click', function() {
+                    fileItem.remove();
+                    // 更新文件输入框的文件列表
+                    const dataTransfer = new DataTransfer();
+                    for (const f of fileInput.files) {
+                        if (f !== file) {
+                            dataTransfer.items.add(f);
+                        }
+                    }
+                    fileInput.files = dataTransfer.files;
+                });
+                fileItem.appendChild(removeButton);
+                fileList.appendChild(fileItem);
+            }
+        });
+
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
 
-            // 检查是否选择了文件
-            const fileInput = document.querySelector('input[type="file"]');
             if (fileInput.files.length === 0) {
                 alert("请选择要上传的文件！");
                 return;
             }
 
-            // 显示密码输入框
             const passwordInput = document.getElementById('password');
             if (passwordInput.classList.contains('hidden')) {
                 passwordInput.classList.remove('hidden');
@@ -48,22 +89,18 @@
                 return;
             }
 
-            // 检查密码是否为空
             const password = passwordInput.value;
             if (!password) {
                 alert("密码不能为空！");
                 return;
             }
 
-            // 构造表单数据
             const formData = new FormData(this);
             formData.append("password", password);
 
-            // 使用XMLHttpRequest上传文件并显示进度
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload', true);
 
-            // 监听上传进度
             xhr.upload.onprogress = function(e) {
                 if (e.lengthComputable) {
                     const percent = (e.loaded / e.total) * 100;
@@ -71,11 +108,14 @@
                 }
             };
 
-            // 上传完成后的回调
             xhr.onload = function() {
                 if (xhr.status === 200) {
                     alert('上传成功：' + xhr.responseText);
-                    document.getElementById('progress').value = 0; // 重置进度条
+                    document.getElementById('progress').value = 0;
+                    fileList.innerHTML = '';
+                    passwordInput.classList.add('hidden');
+                    passwordInput.value = '';
+                    cancelButton.classList.add('hidden');
                 } else if (xhr.status === 403) {
                     alert('密码错误');
                 } else {
@@ -84,6 +124,22 @@
             };
 
             xhr.send(formData);
+
+            // 显示取消按钮
+            cancelButton.classList.remove('hidden');
+            cancelButton.addEventListener('click', function() {
+                xhr.abort();
+                fetch(`/cancel/${uploadId}`, { method: 'POST' });
+                alert('上传已取消');
+                document.getElementById('progress').value = 0;
+                fileList.innerHTML = '';
+                passwordInput.classList.add('hidden');
+                passwordInput.value = '';
+                cancelButton.classList.add('hidden');
+            });
+
+            // 生成上传ID
+            uploadId = Math.random().toString(36).substring(2);
         });
     </script>
 </body>
